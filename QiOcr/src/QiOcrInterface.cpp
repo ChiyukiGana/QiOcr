@@ -33,5 +33,6 @@ extern "C" __declspec(dllexport) QiOcrInterface* _stdcall QiOcrInterfaceInitInte
 {
 	QiOcrInterfaceDef* ocr = new QiOcrInterfaceDef();
 	if (ocr->ocr->isInit()) return (QiOcrInterface*)ocr;
+	delete ocr;
 	return nullptr;
 }
