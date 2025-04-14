@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <numeric>
+#include <sstream>
 #include <fstream>
 #include <windows.h>
 #include <atlimage.h>
@@ -64,6 +65,19 @@ public:
 			if (length) return result;
 		}
 		return std::wstring();
+	}
+	static bool readFile(const std::string& file, std::unique_ptr<char[]>& data, size_t& size)
+	{
+		std::ifstream modelFile(file, std::ios::in | std::ios::binary | std::ios::ate);
+		if (!modelFile) return false;
+		
+		size = modelFile.tellg();
+		if (!size) return false;
+
+		modelFile.seekg(0, std::ios::beg);
+		data = std::make_unique<char[]>(size);
+		modelFile.read(data.get(), size);
+		return (bool)modelFile.gcount();
 	}
 public:
 	~OcrBase()
@@ -137,13 +151,10 @@ public:
 class OcrDet : public OcrBase
 {
 public:
-	int init(const std::string& model, size_t threads = 2)
+	int init(void* modelData, size_t modelSize, size_t threads = 2)
 	{
 		OcrBase::release();
 		if (!threads) threads = 1;
-
-		std::ifstream modelFile(model);
-		if (!modelFile) return OnnxOcrResult::r_model_notfound;
 
 		if (!Ort::Global<void>::api_) return OnnxOcrResult::r_sdk_different;
 		try
@@ -160,7 +171,7 @@ public:
 			options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 			options.SetInterOpNumThreads(threads);
 
-			m_session = std::make_unique<Ort::Session>(*m_env, toWString(model).c_str(), options);
+			m_session = std::make_unique<Ort::Session>(*m_env, modelData, modelSize, options);
 
 			size_t inputCount = m_session->GetInputCount();
 			if (!inputCount) return OnnxOcrResult::r_model_invalid;
@@ -179,6 +190,14 @@ public:
 
 		m_init = true;
 		return OnnxOcrResult::r_ok;
+	}
+	int init(const std::string& model, size_t threads = 2)
+	{
+		size_t modelSize;
+		std::unique_ptr<char[]> modelData;
+		if (!readFile(model, modelData, modelSize)) return OnnxOcrResult::r_model_notfound;
+
+		return init(modelData.get(), modelSize, threads);
 	}
 
 	std::vector<cv::Mat> scan(const cv::Mat& image, float margin_ratio = 1.0f)
@@ -273,22 +292,12 @@ class OcrRec : public OcrBase
 	std::vector<std::string> m_keys;
 	size_t m_scaleSize = 48;
 public:
-	int init(const std::string& model, const std::string& keys, size_t threads = 2, size_t scaleSize = 48)
+	int init(void* modelData, size_t modelSize, const std::vector<std::string>& keys, size_t threads = 2, size_t scaleSize = 48)
 	{
 		OcrBase::release();
-		m_keys.clear();
-		if (!threads) threads = 1;
+		m_keys = keys;
 		m_scaleSize = scaleSize;
-
-		std::ifstream modelFile(model);
-		if (!modelFile) return OnnxOcrResult::r_model_notfound;
-
-		std::ifstream keysFile(keys);
-		if (!keysFile) return OnnxOcrResult::r_keys_notfound;
-
-		std::string line;
-		while (std::getline(keysFile, line)) m_keys.push_back(line);
-
+		if (!threads) threads = 1;
 		if (m_keys.empty()) return OnnxOcrResult::r_keys_invalid;
 
 		if (!Ort::Global<void>::api_) return OnnxOcrResult::r_sdk_different;
@@ -306,7 +315,7 @@ public:
 			options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 			options.SetInterOpNumThreads(threads);
 
-			m_session = std::make_unique<Ort::Session>(*m_env, toWString(model).c_str(), options);
+			m_session = std::make_unique<Ort::Session>(*m_env, modelData, modelSize, options);
 
 			size_t inputCount = m_session->GetInputCount();
 			if (!inputCount) return OnnxOcrResult::r_model_invalid;
@@ -325,6 +334,37 @@ public:
 
 		m_init = true;
 		return OnnxOcrResult::r_ok;
+	}
+	int init(void* modelData, size_t modelSize, void* keysData, size_t keysSize, size_t threads = 2, size_t scaleSize = 48)
+	{
+		std::istringstream keysDataStream(std::string((const char*)keysData, keysSize));
+		std::vector<std::string> keys;
+		std::string line;
+		while (std::getline(keysDataStream, line))
+		{
+			if (!line.empty() && line.back() == '\r') line.pop_back();
+			keys.push_back(line);
+		}
+
+		return init(modelData, modelSize, keys, threads, scaleSize);
+	}
+	int init(const std::string& model, const std::string& keys, size_t threads = 2, size_t scaleSize = 48)
+	{
+		size_t modelSize;
+		std::unique_ptr<char[]> modelData;
+		if (!readFile(model, modelData, modelSize)) return OnnxOcrResult::r_model_notfound;
+
+		std::ifstream keysFile(keys);
+		if (!keysFile) return OnnxOcrResult::r_keys_notfound;
+		std::vector<std::string> keysData;
+		std::string line;
+		while (std::getline(keysFile, line))
+		{
+			if (!line.empty() && line.back() == '\r') line.pop_back();
+			keysData.push_back(line);
+		}
+
+		return init(modelData.get(), modelSize, keysData, threads, scaleSize);
 	}
 
 	std::string scoreToString(const std::vector<float>& outputData, int h, int w)
@@ -392,31 +432,17 @@ public:
 		size_t threads = info.dwNumberOfProcessors >> 1;
 		if (threads < 2) threads = 2;
 
-		for (size_t i = 0; i < 2; i++)
-		{
-			int result;
-			std::wstring title;
-			if (i)
-			{
-				result = rec->init("OCR\\ppocr.onnx", "OCR\\ppocr.keys", threads, 48);
-				title = L"OCR识别初始化错误";
-			}
-			else
-			{
-				result = det->init("OCR\\ppdet.onnx", threads);
-				title = L"OCR检测初始化错误";
-			}
-			switch (result)
-			{
-			case OnnxOcrResult::r_ok: continue;
-			case OnnxOcrResult::r_model_notfound: MessageBoxW(nullptr, L"模型不存在", title.c_str(), MB_ICONERROR); return;
-			case OnnxOcrResult::r_keys_notfound: MessageBoxW(nullptr, L"Key不存在", title.c_str(), MB_ICONERROR); return;
-			case OnnxOcrResult::r_model_invalid: MessageBoxW(nullptr, L"模型无效", title.c_str(), MB_ICONERROR); return;
-			case OnnxOcrResult::r_keys_invalid: MessageBoxW(nullptr, L"Key无效", title.c_str(), MB_ICONERROR); return;
-			case OnnxOcrResult::r_sdk_different: MessageBoxW(nullptr, L"Sdk不一致", title.c_str(), MB_ICONERROR); return;
-			default: MessageBoxW(nullptr, L"未知错误", title.c_str(), MB_ICONERROR); return;
-			}
-		}
+		if (!showResult(rec->init("OCR\\ppocr.onnx", "OCR\\ppocr.keys", threads, 48), L"OCR识别初始化错误")) return;
+		if (!showResult(det->init("OCR\\ppdet.onnx", threads), L"OCR检测初始化错误")) return;
+	}
+	QiOcrTool(void* recData, size_t recSize, void* keyData, size_t keySize, void* detData, size_t detSize) : rec(new OcrRec), det(new OcrDet)
+	{
+		SYSTEM_INFO info; GetSystemInfo(&info);
+		size_t threads = info.dwNumberOfProcessors >> 1;
+		if (threads < 2) threads = 2;
+
+		if (!showResult(rec->init(recData, recSize, keyData, keySize, threads, 48), L"OCR识别初始化错误")) return;
+		if (!showResult(det->init(detData, detSize, threads), L"OCR检测初始化错误")) return;
 	}
 
 	~QiOcrTool()
@@ -425,29 +451,50 @@ public:
 		delete det;
 	}
 
+	bool showResult(int result, std::wstring title)
+	{
+		switch (result)
+		{
+		case OnnxOcrResult::r_ok: return true;
+		case OnnxOcrResult::r_model_notfound: MessageBoxW(nullptr, L"模型不存在", title.c_str(), MB_ICONERROR); return false;
+		case OnnxOcrResult::r_keys_notfound: MessageBoxW(nullptr, L"Key不存在", title.c_str(), MB_ICONERROR); return false;
+		case OnnxOcrResult::r_model_invalid: MessageBoxW(nullptr, L"模型无效", title.c_str(), MB_ICONERROR); return false;
+		case OnnxOcrResult::r_keys_invalid: MessageBoxW(nullptr, L"Key无效", title.c_str(), MB_ICONERROR); return false;
+		case OnnxOcrResult::r_sdk_different: MessageBoxW(nullptr, L"Sdk不一致", title.c_str(), MB_ICONERROR); return false;
+		default: MessageBoxW(nullptr, L"未知错误", title.c_str(), MB_ICONERROR); return false;
+		}
+	}
+
 	bool isInit() const
 	{
 		return det->isInit() && rec->isInit();
 	}
 
-	std::vector<std::string> scan_list(const CImage& image)
+	std::vector<std::string> scan_list(const CImage& image, bool skipDet = false)
 	{
 		if (!isInit()) return std::vector<std::string>();
 		cv::Mat mat = toMat(image);
 		if (mat.empty()) return std::vector<std::string>();
 
-		std::vector<cv::Mat> textBlock = det->scan(mat, 1.0f);
 		std::vector<std::string> result;
-		for (const cv::Mat& i : textBlock)
+		if (skipDet)
 		{
-			std::string text = rec->scan(i);
-			if (text.empty()) continue;
-			result.push_back(text);
+			result.push_back(rec->scan(mat));
+		}
+		else
+		{
+			std::vector<cv::Mat> textBlock = det->scan(mat, 1.0f);
+			for (const cv::Mat& i : textBlock)
+			{
+				std::string text = rec->scan(i);
+				if (text.empty()) continue;
+				result.push_back(text);
+			}
 		}
 		return result;
 	}
 
-	std::vector<std::string> scan_list(const RECT& rect)
+	std::vector<std::string> scan_list(const RECT& rect, bool skipDet = false)
 	{
 		if (!isInit()) return std::vector<std::string>();
 		int w = rect.right - rect.left;
@@ -464,7 +511,7 @@ public:
 		return result;
 	}
 
-	std::string scan(const CImage& image)
+	std::string scan(const CImage& image, bool skipDet = false)
 	{
 		std::vector<std::string> result = scan_list(image);
 		std::string text;
@@ -476,7 +523,7 @@ public:
 		return text;
 	}
 
-	std::string scan(const RECT& rect)
+	std::string scan(const RECT& rect, bool skipDet = false)
 	{
 		std::vector<std::string> result = scan_list(rect);
 		std::string text;
