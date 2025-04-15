@@ -4,6 +4,14 @@
 #include <windows.h>
 #include <atlimage.h>
 
+#ifndef QIOCR_SHARED
+#pragma comment(lib,"onnxruntime.lib")
+#pragma comment(lib,"opencv_core4110.lib")
+#pragma comment(lib,"opencv_imgproc4110.lib")
+#pragma comment(lib,"zlib.lib")
+#pragma comment(lib,"qiocr.lib")
+#endif
+
 struct QiOcrInterface
 {
 	virtual std::vector<std::string> scan_list(const CImage& image, bool skipDet = false) = 0;
@@ -15,7 +23,7 @@ struct QiOcrInterface
 using PFQiOcrInterfaceInit = QiOcrInterface*(*)();
 using PFQiOcrInterfaceInitFromMemory = QiOcrInterface * (*)(void*, size_t, void*, size_t, void*, size_t);
 
-#pragma optimize("",off)
+#ifdef QIOCR_SHARED
 inline QiOcrInterface* QiOcrInterfaceInit()
 {
 	HMODULE hModule = LoadLibraryW(L"qiocr.dll");
@@ -60,4 +68,7 @@ inline QiOcrInterface* QiOcrInterfaceInit(void* recData, size_t recSize, void* k
 	}
 	return pInterface;
 }
-#pragma optimize("",on)
+#else
+QiOcrInterface* QiOcrInterfaceInit();
+QiOcrInterface* QiOcrInterfaceInit(void* recData, size_t recSize, void* keysData, size_t keysSize, void* detData, size_t detSize);
+#endif

@@ -32,7 +32,10 @@ struct QiOcrInterfaceDef : QiOcrInterface
 	QiOcrTool* ocr = nullptr;
 };
 
-extern "C" __declspec(dllexport) QiOcrInterface* _stdcall QiOcrInterfaceInitInterface()
+#ifdef QIOCR_SHARED
+extern "C" __declspec(dllexport)
+#endif
+QiOcrInterface* _stdcall QiOcrInterfaceInitInterface()
 {
 	QiOcrInterfaceDef* ocr = new QiOcrInterfaceDef();
 	if (ocr->ocr->isInit()) return (QiOcrInterface*)ocr;
@@ -40,10 +43,24 @@ extern "C" __declspec(dllexport) QiOcrInterface* _stdcall QiOcrInterfaceInitInte
 	return nullptr;
 }
 
-extern "C" __declspec(dllexport) QiOcrInterface* _stdcall QiOcrInterfaceInitInterfaceFromMemory(void* recData, size_t recSize, void* keysData, size_t keysSize, void* detData, size_t detSize)
+#ifdef QIOCR_SHARED
+extern "C" __declspec(dllexport)
+#endif
+QiOcrInterface* _stdcall QiOcrInterfaceInitInterfaceFromMemory(void* recData, size_t recSize, void* keysData, size_t keysSize, void* detData, size_t detSize)
 {
 	QiOcrInterfaceDef* ocr = new QiOcrInterfaceDef(recData, recSize, keysData, keysSize, detData, detSize);
 	if (ocr->ocr->isInit()) return (QiOcrInterface*)ocr;
 	delete ocr;
 	return nullptr;
 }
+
+#ifndef QIOCR_SHARED
+QiOcrInterface* QiOcrInterfaceInit()
+{
+	return QiOcrInterfaceInitInterface();
+}
+QiOcrInterface* QiOcrInterfaceInit(void* recData, size_t recSize, void* keysData, size_t keysSize, void* detData, size_t detSize)
+{
+	return QiOcrInterfaceInitInterfaceFromMemory(recData, recSize, keysData, keysSize, detData, detSize);
+}
+#endif

@@ -34,6 +34,7 @@
     <IntDir>$(ProjectDir).build</IntDir>
     <IncludePath>$(SolutionDir)QiOcr\include;$(IncludePath)</IncludePath>
     <TargetName>test</TargetName>
+    <LibraryPath>$(SolutionDir)QiOcr\onnxruntime\x64;$(SolutionDir)QiOcr\opencv\x64;$(SolutionDir).build;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>

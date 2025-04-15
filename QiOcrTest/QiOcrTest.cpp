@@ -1,6 +1,9 @@
 ﻿#pragma once
 #include <fstream>
 #include <iostream>
+
+#define QIOCR_SHARED
+
 #include <QiOcrInterface.h>
 
 static bool readFile(const std::string& file, std::unique_ptr<char[]>& data, size_t& size)

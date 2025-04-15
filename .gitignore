@@ -7,4 +7,6 @@
 /QiOcr/onnxruntime/x64
 /QiOcr/opencv/x64
 
+/QiOcrStatic/.build
+
 /QiOcrTest/.build
