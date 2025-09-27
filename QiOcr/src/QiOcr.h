@@ -77,18 +77,36 @@ public:
 		}
 		return std::wstring();
 	}
-	static bool readFile(const std::string& file, std::unique_ptr<char[]>& data, size_t& size)
+	static std::vector<char> readFile(const std::wstring& file)
 	{
-		std::ifstream modelFile(file, std::ios::in | std::ios::binary | std::ios::ate);
-		if (!modelFile) return false;
-		
-		size = modelFile.tellg();
-		if (!size) return false;
-
-		modelFile.seekg(0, std::ios::beg);
-		data = std::make_unique<char[]>(size);
-		modelFile.read(data.get(), size);
-		return (bool)modelFile.gcount();
+		HANDLE hFile = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+		if (hFile && hFile != INVALID_HANDLE_VALUE)
+		{
+			DWORD size = GetFileSize(hFile, NULL);
+			if (size && size != INVALID_FILE_SIZE)
+			{
+				DWORD bytesReaded = 0;
+				std::vector<char> data(size);
+				BOOL b = ReadFile(hFile, data.data(), size, &bytesReaded, 0);
+				CloseHandle(hFile);
+				if (b != FALSE) return data;
+			}
+			CloseHandle(hFile);
+		}
+		return std::vector<char>();
+	}
+	static std::vector<std::string> split(std::string str, const std::string& split_by) {
+		std::vector<std::string> result;
+		if (split_by.empty()) { result.push_back(str); return result; }
+		size_t pos = 0;
+		size_t found;
+		while ((found = str.find(split_by, pos)) != std::string::npos)
+		{
+			result.push_back(str.substr(pos, found - pos));
+			pos = found + split_by.length();
+		}
+		result.push_back(str.substr(pos));
+		return result;
 	}
 public:
 	~OcrBase()
@@ -207,20 +225,21 @@ public:
 		m_init = true;
 		return OnnxOcrResult::r_ok;
 	}
-	int init(const std::string& model, size_t threads = 0)
+	int init(const std::wstring& model, size_t threads = 0)
 	{
-		size_t modelSize;
-		std::unique_ptr<char[]> modelData;
-		if (!readFile(model, modelData, modelSize)) return OnnxOcrResult::r_model_notfound;
-
-		return init(modelData.get(), modelSize, threads);
+		std::vector<char> modelData = readFile(model);
+		if (modelData.empty()) return OnnxOcrResult::r_model_notfound;
+		return init(modelData.data(), modelData.size(), threads);
 	}
 
-	std::vector<cv::Mat> scan(const cv::Mat& image, float margin_ratio = 1.0f)
+	std::vector<cv::Mat> scan(const cv::Mat& image, float margin_ratio = 1.0f, std::vector<POINT>* centers = nullptr)
 	{
 		if (!isInit()) return std::vector<cv::Mat>();
 		if (image.empty()) return std::vector<cv::Mat>();
 		if (image.channels() < 3) return std::vector<cv::Mat>();
+
+		const int origWidth = image.cols;
+		const int origHeight = image.rows;
 
 		cv::Mat imageScaled = resizeImage(image, 32);
 		std::vector<float> tensorValues = OcrBase::makeTensorValues(imageScaled);
@@ -276,6 +295,12 @@ public:
 			for (std::vector<cv::Rect>::const_reverse_iterator i = boxes.rbegin(); i != boxes.rend(); i++)
 			{
 				const cv::Rect& rect = *i;
+				float centerXScaled = rect.x + rect.width / 2.0f;
+				float centerYScaled = rect.y + rect.height / 2.0f;
+				float centerXOrig = (centerXScaled / imageScaled.cols) * origWidth;
+				float centerYOrig = (centerYScaled / imageScaled.rows) * origHeight;
+
+				if (centers != nullptr) centers->push_back({ static_cast<int>(std::round(centerXOrig)), static_cast<int>(std::round(centerYOrig)) });
 				if (rect.width > 0 && rect.height > 0) regions.emplace_back(imageScaled(rect).clone());
 			}
 
@@ -369,23 +394,23 @@ public:
 
 		return init(modelData, modelSize, keys, threads, scaleSize);
 	}
-	int init(const std::string& model, const std::string& keys, size_t threads = 0, size_t scaleSize = 48)
+	int init(const std::wstring& model, const std::wstring& keys, size_t threads = 0, size_t scaleSize = 48)
 	{
-		size_t modelSize;
-		std::unique_ptr<char[]> modelData;
-		if (!readFile(model, modelData, modelSize)) return OnnxOcrResult::r_model_notfound;
+		std::vector<char> modelData = readFile(model);
+		if (modelData.empty()) return OnnxOcrResult::r_model_notfound;
 
-		std::ifstream keysFile(keys);
-		if (!keysFile) return OnnxOcrResult::r_keys_notfound;
-		std::vector<std::string> keysData;
-		std::string line;
-		while (std::getline(keysFile, line))
-		{
-			if (!line.empty() && line.back() == '\r') line.pop_back();
-			keysData.push_back(line);
-		}
+		std::vector<char> keysData = readFile(keys);
+		if (keysData.empty()) return OnnxOcrResult::r_keys_notfound;
 
-		return init(modelData.get(), modelSize, keysData, threads, scaleSize);
+		std::string keysString(keysData.begin(), keysData.end());
+		std::string symbol;
+		if (keysString.find("\r\n") != std::string::npos) symbol = "\r\n";
+		else if (keysString.find("\n") != std::string::npos) symbol = "\n";
+		else if (keysString.find("\r") != std::string::npos) symbol = "\r";
+		else return OnnxOcrResult::r_keys_invalid;
+		std::vector<std::string> keysList = split(std::string(keysData.begin(), keysData.end()), symbol);
+
+		return init(modelData.data(), modelData.size(), keysList, threads, scaleSize);
 	}
 
 	std::string scoreToString(const std::vector<float>& outputData, int h, int w)
@@ -448,10 +473,10 @@ class QiOcrTool
 	OcrRec* rec;
 	std::mutex mtx;
 public:
-	QiOcrTool(size_t threads = 0) : rec(new OcrRec), det(new OcrDet)
+	QiOcrTool(const std::wstring& recFile, const std::wstring& keyFile, const std::wstring& detFile, size_t threads = 0) : rec(new OcrRec), det(new OcrDet)
 	{
-		if (!showResult(rec->init("OCR\\ppocr.onnx", "OCR\\ppocr.keys", threads, 48), L"OCR识别初始化错误")) return;
-		if (!showResult(det->init("OCR\\ppdet.onnx", threads), L"OCR检测初始化错误")) return;
+		if (!showResult(rec->init(recFile, keyFile, threads, 48), L"OCR识别初始化错误")) return;
+		if (!showResult(det->init(detFile, threads), L"OCR检测初始化错误")) return;
 	}
 	QiOcrTool(void* recData, size_t recSize, void* keyData, size_t keySize, void* detData, size_t detSize, size_t threads = 0) : rec(new OcrRec), det(new OcrDet)
 	{
@@ -484,7 +509,7 @@ public:
 		return det->isInit() && rec->isInit();
 	}
 
-	std::vector<std::string> scan_list(const CImage& image, bool skipDet = false)
+	std::vector<std::string> scan_list(const CImage& image, bool skipDet = false, std::vector<POINT>* centers = nullptr)
 	{
 		std::unique_lock<std::mutex> lock(mtx);
 		if (!isInit()) return std::vector<std::string>();
@@ -498,7 +523,7 @@ public:
 		}
 		else
 		{
-			std::vector<cv::Mat> textBlock = det->scan(mat, 1.0f);
+			std::vector<cv::Mat> textBlock = det->scan(mat, 1.0f, centers);
 			for (const cv::Mat& i : textBlock)
 			{
 				std::string text = rec->scan(i);
@@ -509,7 +534,7 @@ public:
 		return result;
 	}
 
-	std::vector<std::string> scan_list(const RECT& rect, bool skipDet = false)
+	std::vector<std::string> scan_list(const RECT& rect, bool skipDet = false, std::vector<POINT>* centers = nullptr)
 	{
 		if (!isInit()) return std::vector<std::string>();
 		int w = rect.right - rect.left;
@@ -519,7 +544,7 @@ public:
 		{
 			CImage image; image.Create(w, h, 32);
 			HDC hdc = GetDC(nullptr);
-			if (BitBlt(image.GetDC(), 0, 0, w, h, hdc, rect.left, rect.top, SRCCOPY)) result = scan_list(image, skipDet);
+			if (BitBlt(image.GetDC(), 0, 0, w, h, hdc, rect.left, rect.top, SRCCOPY)) result = scan_list(image, skipDet, centers);
 			image.ReleaseDC();
 			ReleaseDC(nullptr, hdc);
 		}

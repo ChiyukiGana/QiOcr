@@ -6,50 +6,50 @@
 
 #include <QiOcrInterface.h>
 
-static bool readFile(const std::string& file, std::unique_ptr<char[]>& data, size_t& size)
+static std::vector<char> readFile(const std::wstring& file)
 {
-	std::ifstream modelFile(file, std::ios::in | std::ios::binary | std::ios::ate);
-	if (!modelFile) return false;
-
-	size = modelFile.tellg();
-	if (!size) return false;
-
-	modelFile.seekg(0, std::ios::beg);
-	data = std::make_unique<char[]>(size);
-	modelFile.read(data.get(), size);
-	return (bool)modelFile.gcount();
+	HANDLE hFile = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+	if (hFile && hFile != INVALID_HANDLE_VALUE)
+	{
+		DWORD size = GetFileSize(hFile, NULL);
+		if (size && size != INVALID_FILE_SIZE)
+		{
+			DWORD bytesReaded = 0;
+			std::vector<char> data(size);
+			BOOL b = ReadFile(hFile, data.data(), size, &bytesReaded, 0);
+			CloseHandle(hFile);
+			if (b != FALSE) return data;
+		}
+		CloseHandle(hFile);
+	}
+	return std::vector<char>();
 }
 
 int main()
 {
 	std::locale::global(std::locale(".UTF8"));
 
-	bool speedTest = true;
-	bool loadFromMemory = true;
+	bool speedTest = false;
+	bool loadFromMemory = false;
 	size_t threads = 0;
 
-	size_t ver = QiOcrInterfaceVersion();
+	size_t ver = QiOcrInterfaceVersion(L"qiocr.dll");
 
 	std::cout << "qiocr version: " << ver << "\n" << std::endl;
+	if (threads) std::cout << "threads: " << threads << "\n" << std::endl;
+	else std::cout << "threads: auto" << "\n" << std::endl;
 
 	QiOcrModule ocr;
 	if (loadFromMemory)
 	{
-		std::unique_ptr<char[]> rec;
-		size_t recSize;
-		if (!readFile("OCR\\ppocr.onnx", rec, recSize)) return -1;
-		std::unique_ptr<char[]> keys;
-		size_t keysSize;
-		if (!readFile("OCR\\ppocr.keys", keys, keysSize)) return -1;
-		std::unique_ptr<char[]> det;
-		size_t detSize;
-		if (!readFile("OCR\\ppdet.onnx", det, detSize)) return -1;
-
-		ocr = QiOcrInterfaceInit(rec.get(), recSize, keys.get(), keysSize, det.get(), detSize, threads);
+		std::vector<char> rec = readFile(L"OCR\\ppocr.onnx");
+		std::vector<char> keys = readFile(L"OCR\\ppocr.keys");
+		std::vector<char> det = readFile(L"OCR\\ppdet.onnx");
+		ocr = QiOcrInterfaceInit(L"qiocr.dll", rec.data(), rec.size(), keys.data(), keys.size(), det.data(), det.size(), threads);
 	}
 	else
 	{
-		ocr = QiOcrInterfaceInit(threads);
+		ocr = QiOcrInterfaceInit(L"qiocr.dll", L"OCR\\ppocr.onnx", L"OCR\\ppocr.keys", L"OCR\\ppdet.onnx", threads);
 	}
 	if (!ocr.valid())
 	{
@@ -87,16 +87,21 @@ int main()
 			return -1;
 		}
 
+		std::vector<POINT> centers;
+
 		clock_t begin = clock();
-		std::vector<std::string> result = ocr.scan_list(image);
+		std::vector<std::string> result = ocr.scan_list(image, false, &centers);
 		clock_t end = clock() - begin;
 
 		std::cout << "time(ms): " << end << "\n" << std::endl;
 
 		std::cout << "------------------------------" << std::endl;
-		for (const std::string& i : result)
+		for (size_t i = 0; i < result.size(); i++)
 		{
-			std::cout << i << std::endl;
+			std::string s = result[i];
+			POINT p = centers[i];
+			std::cout << p.x << "-" << p.y << ": ";
+			std::cout << s << std::endl;
 		}
 		std::cout << "------------------------------" << std::endl;
 	}
