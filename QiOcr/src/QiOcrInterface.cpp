@@ -1,7 +1,7 @@
 ﻿#include <QiOcrInterface.h>
 #include "QiOcr.h"
 
-#define QIOCR_VERSION 3
+#define QIOCR_VERSION 4
 
 struct QiOcrInterfaceDef : QiOcrInterface
 {
@@ -12,21 +12,25 @@ struct QiOcrInterfaceDef : QiOcrInterface
 	void release() override { if (ocr) { delete ocr; ocr = nullptr; } delete this; }
 	bool init(const std::wstring& recFile, const std::wstring& keyFile, const std::wstring& detFile, size_t threads)
 	{
+		if (ocr) delete ocr;
 		ocr = new QiOcrTool(recFile, keyFile, detFile, threads);
 		if (ocr)
 		{
 			if (ocr->isInit()) return true;
 			delete ocr;
+			ocr = nullptr;
 		}
 		return false;
 	}
 	bool init(void* recData, size_t recSize, void* keyData, size_t keySize, void* detData, size_t detSize, size_t threads)
 	{
+		if (ocr) delete ocr;
 		ocr = new QiOcrTool(recData, recSize, keyData, keySize, detData, detSize, threads);
 		if (ocr)
 		{
 			if (ocr->isInit()) return true;
 			delete ocr;
+			ocr = nullptr;
 		}
 		return false;
 	}

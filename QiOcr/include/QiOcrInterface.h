@@ -25,6 +25,7 @@ using PFQiOcrInterfaceVersion = size_t(*)();
 using PFQiOcrInterfaceInit = QiOcrInterface * (*)(const std::wstring&, const std::wstring&, const std::wstring&, size_t);
 using PFQiOcrInterfaceInitFromMemory = QiOcrInterface * (*)(void*, size_t, void*, size_t, void*, size_t, size_t);
 
+#ifdef QIOCR_SHARED
 class QiOcrModule
 {
 	HMODULE dll = nullptr;
@@ -82,8 +83,6 @@ public:
 		return ocr->scan(rect_screen, skipDet);
 	}
 };
-
-#ifdef QIOCR_SHARED
 inline size_t QiOcrInterfaceVersion(const std::wstring dll)
 {
 	HMODULE hModule = LoadLibraryW(dll.c_str());
