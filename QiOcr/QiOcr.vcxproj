@@ -36,8 +36,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir).build</OutDir>
-    <IntDir>$(ProjectDir).build</IntDir>
+    <OutDir>$(SolutionDir).bin\</OutDir>
+    <IntDir>$(ProjectDir).build\</IntDir>
     <TargetName>qiocr</TargetName>
     <IncludePath>$(ProjectDir)onnxruntime\include;$(ProjectDir)opencv\include;$(ProjectDir)include;$(IncludePath)</IncludePath>
     <LibraryPath>$(ProjectDir)onnxruntime\x64;$(ProjectDir)opencv\x64;$(LibraryPath)</LibraryPath>

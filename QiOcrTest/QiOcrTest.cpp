@@ -33,7 +33,7 @@ int main()
 	bool loadFromMemory = false;
 	size_t threads = 0;
 
-	size_t ver = QiOcrInterfaceVersion(L"qiocr.dll");
+	size_t ver = QiOcrVersion(L"qiocr.dll");
 
 	std::cout << "qiocr version: " << ver << "\n" << std::endl;
 	if (threads) std::cout << "threads: " << threads << "\n" << std::endl;
@@ -45,11 +45,11 @@ int main()
 		std::vector<char> rec = readFile(L"OCR\\ppocr.onnx");
 		std::vector<char> keys = readFile(L"OCR\\ppocr.keys");
 		std::vector<char> det = readFile(L"OCR\\ppdet.onnx");
-		ocr = QiOcrInterfaceInit(L"qiocr.dll", rec.data(), rec.size(), keys.data(), keys.size(), det.data(), det.size(), threads);
+		ocr = QiOcrInit(L"qiocr.dll", rec.data(), rec.size(), keys.data(), keys.size(), det.data(), det.size(), threads);
 	}
 	else
 	{
-		ocr = QiOcrInterfaceInit(L"qiocr.dll", L"OCR\\ppocr.onnx", L"OCR\\ppocr.keys", L"OCR\\ppdet.onnx", threads);
+		ocr = QiOcrInit(L"qiocr.dll", L"OCR\\ppocr.onnx", L"OCR\\ppocr.keys", L"OCR\\ppdet.onnx", threads);
 	}
 	if (!ocr.valid())
 	{

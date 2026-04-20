@@ -68,15 +68,15 @@ QiOcrInterface* _stdcall QiOcrInterfaceInitInterfaceFromMemory(void* recData, si
 }
 
 #ifndef QIOCR_SHARED
-size_t QiOcrInterfaceVersion()
+extern "C" size_t _stdcall QiOcrInterfaceVersion()
 {
 	return QiOcrInterfaceVersionInterface();
 }
-QiOcrInterface* QiOcrInterfaceInit(const std::wstring& recFile, const std::wstring& keyFile, const std::wstring& detFile, size_t threads)
+extern "C" QiOcrInterface* _stdcall QiOcrInterfaceInit(const std::wstring& recFile, const std::wstring& keyFile, const std::wstring& detFile, size_t threads)
 {
 	return QiOcrInterfaceInitInterface(recFile, keyFile, detFile, threads);
 }
-QiOcrInterface* QiOcrInterfaceInit(void* recData, size_t recSize, void* keysData, size_t keysSize, void* detData, size_t detSize, size_t threads)
+extern "C" QiOcrInterface* _stdcall QiOcrInterfaceInitFromMemory(void* recData, size_t recSize, void* keysData, size_t keysSize, void* detData, size_t detSize, size_t threads)
 {
 	return QiOcrInterfaceInitInterfaceFromMemory(recData, recSize, keysData, keysSize, detData, detSize, threads);
 }

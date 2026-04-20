@@ -29,8 +29,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir).build</OutDir>
-    <IntDir>$(ProjectDir).build</IntDir>
+    <OutDir>$(SolutionDir).bin\</OutDir>
+    <IntDir>$(ProjectDir).build\</IntDir>
     <IncludePath>$(SolutionDir)QiOcr\include;$(IncludePath)</IncludePath>
     <TargetName>test</TargetName>
     <LibraryPath>$(SolutionDir)QiOcr\onnxruntime\x64;$(SolutionDir)QiOcr\opencv\x64;$(SolutionDir).build;$(LibraryPath)</LibraryPath>

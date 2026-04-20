@@ -52,8 +52,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(SolutionDir)QiOcr\onnxruntime\include;$(SolutionDir)QiOcr\opencv\include;$(SolutionDir)QiOcr\include;$(SolutionDir)QiOcr\src;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)QiOcr\onnxruntime\x64;$(SolutionDir)QiOcr\opencv\x64;$(LibraryPath)</LibraryPath>
-    <OutDir>$(SolutionDir).build</OutDir>
-    <IntDir>$(ProjectDir).build</IntDir>
+    <OutDir>$(SolutionDir).bin\</OutDir>
+    <IntDir>$(ProjectDir).build\</IntDir>
     <TargetName>qiocr</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

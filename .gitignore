@@ -1,8 +1,5 @@
 /.vs
 
-/.build/qiocr.exp
-/.build/qiocr.lib
-
 /QiOcr/.build
 /QiOcr/onnxruntime/include/*
 /QiOcr/onnxruntime/x64/*
